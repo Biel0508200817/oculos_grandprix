@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUD - Óculos de Realidade Aumentada</title>
+    <style>
+        /* ==================== CSS (ESTILIZAÇÃO) ==================== */
+        
+        /* Estilos Globais */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent;
+            color: #00ffcc;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            text-shadow: 0 0 5px #00ffcc, 0 0 10px #00ffcc;
+        }
+
+        /* ================= TELA DE INICIALIZAÇÃO ================= */
+        #boot-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #050505;
+            z-index: 9999; /* Fica na frente de TUDO */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 1s ease-out; /* Efeito de sumir suavemente */
+        }
+
+        .boot-container {
+            width: 80%;
+            max-width: 600px;
+        }
+
+        #boot-log {
+            font-size: 1.2rem;
+            min-height: 200px;
+            white-space: pre-line; /* Mantém as quebras de linha do JS */
+        }
+
+        .cursor {
+            animation: blink 1s infinite;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 5px;
+            background: rgba(0, 255, 204, 0.2);
+            margin-top: 20px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #00ffcc;
+            box-shadow: 0 0 10px #00ffcc;
+            transition: width 0.1s linear;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Classe para esconder a tela de boot */
+        .fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* ================= HUD PRINCIPAL ================= */
+        #camera-feed {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: -1;
+            background-color: #050505;
+        }
+
+        #ar-hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+
+        #top-bar, #bottom-bar {
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        #center-view {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .reticle {
+            font-size: 3rem;
+            animation: pulse 2s infinite;
+        }
+
+        .scan-result {
+            position: absolute;
+            top: 55%;
+            text-align: center;
+            background: rgba(0, 255, 204, 0.1);
+            border: 1px solid #00ffcc;
+            padding: 10px 20px;
+            border-radius: 5px;
+        }
+
+        .scan-result h2 { margin: 0 0 5px 0; font-size: 1rem; text-transform: uppercase; }
+        .scan-result p { margin: 2px 0; font-size: 0.9rem; }
+
+        aside {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            max-width: 250px;
+        }
+
+        #notifications { left: 20px; border-left: 2px solid #00ffcc; }
+        #navigation { right: 20px; border-right: 2px solid #00ffcc; text-align: right; }
+
+        aside h3 { margin-top: 0; font-size: 1rem; border-bottom: 1px solid #00ffcc; padding-bottom: 5px; }
+        aside ul { list-style-type: none; padding: 0; margin: 0; font-size: 0.85rem; }
+        aside li { margin-bottom: 10px; }
+
+        #quick-actions { pointer-events: auto; display: flex; gap: 10px; }
+        #quick-actions button {
+            background: rgba(0, 255, 204, 0.1);
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 8px 15px;
+            font-family: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+            text-shadow: inherit;
+        }
+
+        #quick-actions button:hover { background: #00ffcc; color: #000; text-shadow: none; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="boot-screen">
+        <div class="boot-container">
+            <div id="boot-log"><span class="cursor">_</span></div>
+            <div class="progress-bar-container">
+                <div id="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <video id="camera-feed" autoplay playsinline muted></video>
+
+    <main id="ar-hud">
+        <header id="top-bar">
+            <div id="status-left">
+                <span class="time">--:--:--</span>
+                <span class="location">Sorocaba, SP</span>
+            </div>
+            <div id="status-right">
+                <span class="signal">Sinal: 5G</span>
+                <span class="battery">Bateria: 85%</span>
+            </div>
+        </header>
+
+        <section id="center-view">
+            <div class="reticle">
+                <span class="crosshair">[ + ]</span>
+            </div>
+            <article class="scan-result">
+                <h2>Alvo Identificado</h2>
+                <p>Análise de Ambiente</p>
+                <p>Status: Aguardando...</p>
+            </article>
+        </section>
+
+        <aside id="notifications">
+            <h3>Alertas de Sistema</h3>
+            <ul id="notif-list">
+                </ul>
+        </aside>
+
+        <aside id="navigation">
+            <h3>Navegação</h3>
+            <div class="compass">
+                <span>Norte: 45° NE</span>
+            </div>
+            <p>Destino a 50m</p>
+        </aside>
+
+        <footer id="bottom-bar">
+            <div id="context-info">
+                <span class="weather">28°C - Ensolarado</span>
+                <span class="heart-rate">BPM: --</span>
+            </div>
+            <nav id="quick-actions">
+                <button type="button" id="btn-camera">Ligar Câmera [M]</button>
+                <button type="button" class="generic-btn">Analisar</button>
+                <button type="button" class="generic-btn">Limpar Logs</button>
+            </nav>
+        </footer>
+    </main>
+
+    <script>
+        // ==========================================
+        // 1. SISTEMA DE INICIALIZAÇÃO (BOOT)
+        // ==========================================
+        const bootMessages = [
+            "Iniciando OS-AR v2.4...",
+            "Carregando Kernel...",
+            "Estabelecendo conexão com satélite local...",
+            "Montando interface gráfica...",
+            "Calibrando retícula ótica...",
+            "Verificando sensores biométricos... OK",
+            "SISTEMA PRONTO."
+        ];
+
+        const bootLogElement = document.getElementById('boot-log');
+        const progressBar = document.getElementById('progress-bar');
+        const bootScreen = document.getElementById('boot-screen');
+        const notifList = document.getElementById('notif-list');
+
+        let messageIndex = 0;
+        let progress = 0;
+        let currentText = "";
+
+        function typeBootMessage() {
+            if (messageIndex < bootMessages.length) {
+                currentText += bootMessages[messageIndex] + "\n";
+                bootLogElement.innerHTML = currentText + '<span class="cursor">_</span>';
+                
+                // Aumenta a barra de progresso baseado na quantidade de mensagens
+                progress += (100 / bootMessages.length);
+                progressBar.style.width = progress + '%';
+
+                messageIndex++;
+                
+                // Tempo aleatório entre mensagens para parecer mais realista
+                const randomDelay = Math.floor(Math.random() * 500) + 300;
+                setTimeout(typeBootMessage, randomDelay);
+            } else {
+                // Fim das mensagens, espera um pouquinho e esconde a tela
+                setTimeout(() => {
+                    bootScreen.classList.add('fade-out');
+                    
+                    // Adiciona as mensagens iniciais no HUD após o boot
+                    notifList.innerHTML = `
+                        <li>[SISTEMA] Inicialização concluída</li>
+                        <li>[REDE] Conexão Estável</li>
+                    `;
+                }, 800);
+            }
+        }
+
+        // Inicia a sequência de boot assim que a página carrega
+        window.onload = () => {
+            setTimeout(typeBootMessage, 500);
+        };
+
+
+        // ==========================================
+        // 2. LÓGICA DO HUD
+        // ==========================================
+
+        function updateTime() {
+            const timeElement = document.querySelector('.time');
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            timeElement.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        function simulateHeartRate() {
+            const bpmElement = document.querySelector('.heart-rate');
+            const randomBPM = Math.floor(Math.random() * (76 - 70 + 1)) + 70;
+            bpmElement.textContent = `BPM: ${randomBPM}`;
+        }
+        setInterval(simulateHeartRate, 3000);
+        simulateHeartRate();
+
+        const genericButtons = document.querySelectorAll('.generic-btn');
+        genericButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const action = e.target.textContent;
+                
+                if(action === "Limpar Logs") {
+                    notifList.innerHTML = "";
+                    return;
+                }
+
+                const newNotification = document.createElement('li');
+                newNotification.textContent = `[SISTEMA] Executando: ${action}`;
+                newNotification.style.color = '#fff';
+                notifList.prepend(newNotification);
+                
+                setTimeout(() => {
+                    if(newNotification.parentNode) newNotification.remove();
+                }, 4000);
+            });
+        });
+
+        // 3. Ligar a Câmera
+        const btnCamera = document.getElementById('btn-camera');
+        const videoElement = document.getElementById('camera-feed');
+        let cameraAtiva = false;
+        let videoStream = null;
+
+        btnCamera.addEventListener('click', async () => {
+            if (cameraAtiva) {
+                const tracks = videoStream.getTracks();
+                tracks.forEach(track => track.stop());
+                videoElement.srcObject = null;
+                cameraAtiva = false;
+                
+                btnCamera.textContent = "Ligar Câmera [M]";
+                btnCamera.style.color = "#00ffcc";
+                btnCamera.style.backgroundColor = "rgba(0, 255, 204, 0.1)";
+                return;
+            }
+
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+                
+                videoElement.srcObject = videoStream;
+                cameraAtiva = true;
+                
+                btnCamera.textContent = "Desligar Câmera [M]";
+                btnCamera.style.color = "#000";
+                btnCamera.style.backgroundColor = "#00ffcc";
+                
+            } catch (erro) {
+                console.error("Erro ao acessar a câmera: ", erro);
+                alert("Não foi possível acessar a câmera.");
+            }
+        });
+
+        // 4. Atalho de Teclado (Tecla 'M')
+        document.addEventListener('keydown', (event) => {
+            if (event.key.toLowerCase() === 'm') {
+                btnCamera.click();
+            }
+        });
+    </script>
+</body>
+</html>
